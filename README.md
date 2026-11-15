@@ -4,10 +4,10 @@
 
 Télécharge ou imprime les publications Calaméo complètes, directement depuis le lecteur.
 
-[![Firefox](https://img.shields.io/badge/Firefox-T%C3%A9l%C3%A9charger-FF7139?logo=firefoxbrowser&logoColor=white)](https://github.com/elig-45/calameo-pdf-export/releases/latest/download/calameo-pdf-export-0.3.0-firefox.zip)
-[![Microsoft Edge](https://img.shields.io/badge/Edge-T%C3%A9l%C3%A9charger-0078D7?logo=microsoftedge&logoColor=white)](https://github.com/elig-45/calameo-pdf-export/releases/latest/download/calameo-pdf-export-0.3.0-chromium.zip)
-[![Brave testé](https://img.shields.io/badge/Brave-test%C3%A9-FF5F1F?logo=brave&logoColor=white)](https://brave.com/)
-[![Dernière version](https://img.shields.io/github/v/release/elig-45/calameo-pdf-export?logo=github&label=version)](https://github.com/elig-45/calameo-pdf-export/releases/latest)
+[![Firefox](https://img.shields.io/badge/Firefox-T%C3%A9l%C3%A9charger-FF7139?logo=firefoxbrowser&logoColor=white&style=flat-square)](https://github.com/elig-45/calameo-pdf-export/releases/latest/download/calameo-pdf-export-0.3.0-firefox.zip)
+[![Microsoft Edge](https://img.shields.io/badge/Edge-T%C3%A9l%C3%A9charger-0078D7?logo=microsoftedge&logoColor=white&style=flat-square)](https://github.com/elig-45/calameo-pdf-export/releases/latest/download/calameo-pdf-export-0.3.0-chromium.zip)
+[![Brave testé](https://img.shields.io/badge/Brave-test%C3%A9-FF5F1F?logo=brave&logoColor=white&style=flat-square)](https://brave.com/)
+[![Dernière version](https://img.shields.io/github/v/release/elig-45/calameo-pdf-export?logo=github&label=version&style=flat-square)](https://github.com/elig-45/calameo-pdf-export/releases/latest)
 
 <img src="store-assets/edge-small-tile-440x280.png" alt="Calaméo PDF Export : télécharger et imprimer des publications complètes" width="440">
 
