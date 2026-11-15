@@ -20,5 +20,5 @@
     }
   }
 
-  globalThis.CalaméoPdfShared = Object.freeze({ documentCacheKey });
+  globalThis.CalameoPdfShared = Object.freeze({ documentCacheKey });
 })();
