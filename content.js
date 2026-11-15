@@ -409,7 +409,8 @@
         break;
       case "download-started":
         getElement("cancel").hidden = true;
-        showProgress("Téléchargement du PDF…", message.total || 1, message.total || 1);
+        setBusy(false);
+        setStatus("Téléchargement du PDF en cours dans Téléchargements.", "normal");
         break;
       case "complete":
         state.terminalRequestId = message.requestId;

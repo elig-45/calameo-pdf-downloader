@@ -6,7 +6,7 @@ Extension Chrome Manifest V3 qui ajoute un bouton **PDF** au lecteur Calaméo. E
 
 - Réutilisation du bouton natif **Télécharger** lorsque Calaméo le désactive : il ouvre alors les choix d’export PDF.
 - Export de toutes les pages ou d'une sélection, par exemple `1-3, 8, 12-15`.
-- Barre de progression et annulation pendant la lecture des pages.
+- Barre de progression et annulation pendant la lecture des pages ; le panneau redevient disponible dès que Chrome accepte le téléchargement.
 - PDF assemblé localement dans le navigateur, sans service de conversion externe.
 - Nom de fichier dérivé du titre de la publication.
 - Compatible avec Chrome, Brave et Edge sous Chromium 116 ou plus récent.
