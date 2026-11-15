@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Calaméo PDF Export",
+  "version": "0.1.0",
+  "description": "Crée un PDF à partir de toutes les pages ou d'une sélection dans le lecteur Calaméo.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "downloads",
+    "offscreen",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.calameoassets.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.calameo.com/read/*",
+        "https://calameo.com/read/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
