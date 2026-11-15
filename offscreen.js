@@ -13,13 +13,24 @@ const PREPARED_PDF_MAX_BYTES = 128 * 1024 * 1024;
 const jobs = new Map();
 const downloadUrls = new Map();
 
+globalThis.CalameoPdfOffscreenBridge = handleOffscreenMessage;
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.target !== OFFSCREEN_TARGET) {
     return false;
   }
 
+  handleOffscreenMessage(message)
+    .then(sendResponse)
+    .catch((error) => sendResponse({ ok: false, error: readableError(error) }));
+  return true;
+});
+
+async function handleOffscreenMessage(message) {
+  if (!message || message.target !== OFFSCREEN_TARGET) {
+    return { ok: false };
+  }
   if (message.type === "START_JOB") {
-    const requestId = String(message.requestId || "");
     const activePreparation = [...jobs.values()].find((job) => job.kind === "prepare");
     if (activePreparation) {
       const requestedCacheKey = CalameoPdfShared.documentCacheKey(
@@ -44,26 +55,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } else {
         activePreparation.controller.abort();
       }
-      activePreparation.done
-        .then(() => startExportJob(message, sendResponse))
-        .catch(() => sendResponse({ ok: false, error: "La préparation en arrière-plan n'a pas pu être interrompue." }));
-      return true;
+      try {
+        await activePreparation.done;
+      } catch {
+        return { ok: false, error: "La préparation en arrière-plan n'a pas pu être interrompue." };
+      }
+      return startExportJob(message);
     }
 
     if (jobs.size > 0) {
-      sendResponse({ ok: false, error: "Un autre export PDF est déjà en cours." });
-      return false;
+      return { ok: false, error: "Un autre export PDF est déjà en cours." };
     }
 
-    startExportJob(message, sendResponse);
-    return false;
+    return startExportJob(message);
   }
 
   if (message.type === "PREPARE_FULL") {
     const requestId = String(message.requestId || "");
     if (jobs.size > 0) {
-      sendResponse({ ok: false, error: "Une autre opération PDF est déjà en cours." });
-      return false;
+      return { ok: false, error: "Une autre opération PDF est déjà en cours." };
     }
 
     const controller = new AbortController();
@@ -77,38 +87,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     jobs.set(requestId, job);
     job.done = runPreparation(message, controller.signal, job)
       .finally(() => jobs.delete(requestId));
-    sendResponse({ ok: true, requestId });
-    return false;
+    return { ok: true, requestId };
   }
 
   if (message.type === "CANCEL_JOB") {
     jobs.get(String(message.requestId || ""))?.controller.abort();
-    sendResponse({ ok: true });
-    return false;
+    return { ok: true };
   }
 
   if (message.type === "REVOKE_DOWNLOAD_URL") {
     revokeDownloadUrl(String(message.requestId || ""));
-    sendResponse({ ok: true });
-    return false;
+    return { ok: true };
   }
 
-  return false;
-});
+  return { ok: false };
+}
 
-function startExportJob(message, sendResponse) {
+function startExportJob(message) {
   const requestId = String(message.requestId || "");
   if (jobs.size > 0) {
-    sendResponse({ ok: false, error: "Un autre export PDF est déjà en cours." });
-    return;
+    return { ok: false, error: "Un autre export PDF est déjà en cours." };
   }
 
   const controller = new AbortController();
   const job = { controller, kind: "export", tabId: Number(message.tabId), done: null };
   jobs.set(requestId, job);
-  sendResponse({ ok: true });
   job.done = runExport(message, controller.signal)
     .finally(() => jobs.delete(requestId));
+  return { ok: true, requestId };
 }
 
 async function runPreparation(job, signal, jobState) {
@@ -160,7 +166,7 @@ async function runPreparation(job, signal, jobState) {
       await writePreparationFailure(cacheKey, pageCount, title, readableError(error)).catch(() => {});
     }
   } finally {
-    await chrome.runtime.sendMessage({
+    await sendBackgroundMessage({
       type: "CALAMEO_PDF_OFFSCREEN_IDLE",
       requestId
     }).catch(() => {});
@@ -216,7 +222,7 @@ async function runExport(job, signal) {
     const blobUrl = URL.createObjectURL(pdfBlob);
     downloadUrls.set(requestId, blobUrl);
 
-    const result = await chrome.runtime.sendMessage({
+    const result = await sendBackgroundMessage({
       type: "CALAMEO_PDF_DOWNLOAD",
       requestId,
       tabId,
@@ -229,7 +235,7 @@ async function runExport(job, signal) {
       throw new Error(result?.error || "Le navigateur n'a pas démarré le téléchargement.");
     }
 
-    await chrome.runtime.sendMessage({
+    await sendBackgroundMessage({
       type: "CALAMEO_PDF_OFFSCREEN_IDLE",
       requestId
     });
@@ -250,7 +256,7 @@ async function runExport(job, signal) {
       cancelled ? "Export interrompu" : readableError(error)
     );
     revokeDownloadUrl(requestId);
-    await chrome.runtime.sendMessage({
+    await sendBackgroundMessage({
       type: "CALAMEO_PDF_OFFSCREEN_IDLE",
       requestId
     });
@@ -655,7 +661,7 @@ function revokeDownloadUrl(requestId) {
 }
 
 async function report(tabId, requestId, phase, completed, total, detail) {
-  await chrome.runtime.sendMessage({
+  await sendBackgroundMessage({
     type: "CALAMEO_PDF_STATUS",
     tabId,
     requestId,
@@ -664,6 +670,13 @@ async function report(tabId, requestId, phase, completed, total, detail) {
     total,
     detail
   }).catch(() => {});
+}
+
+function sendBackgroundMessage(message) {
+  if (typeof globalThis.CalameoPdfBackgroundBridge === "function") {
+    return Promise.resolve().then(() => globalThis.CalameoPdfBackgroundBridge(message));
+  }
+  return chrome.runtime.sendMessage(message);
 }
 
 function throwIfAborted(signal) {

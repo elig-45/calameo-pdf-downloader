@@ -11,11 +11,18 @@
     nativeDownloadButtonObserver: null,
     nativeDownloadSnapshot: null,
     nativeOverrideActive: false,
+    nativePrintButton: null,
+    nativePrintClickHandler: null,
+    nativePrintButtonObserver: null,
+    nativePrintSnapshot: null,
+    nativePrintOverrideActive: false,
     currentRequestId: null,
     terminalRequestId: null,
     busy: false,
     preparingDocumentKey: null,
     preparationRetryAfter: 0,
+    printFrameHost: null,
+    printFrame: null,
     observer: null
   };
 
@@ -51,6 +58,7 @@
     window.addEventListener("scroll", positionPanel, true);
     document.addEventListener("keydown", handlePrintShortcut, true);
     document.addEventListener("visibilitychange", () => refreshMetadata());
+    window.addEventListener("message", handlePrintFrameMessage);
     chrome.runtime.onMessage.addListener(handleRuntimeMessage);
   }
 
@@ -157,6 +165,7 @@
 
     const metadata = readReaderMetadata();
     syncNativeDownloadButton(metadata);
+    syncNativePrintButton(metadata);
     const canExport = metadata.pageCount > 0 && Boolean(metadata.pageTemplate);
     if (canExport && !state.busy) {
       schedulePdfPreparation(metadata);
@@ -213,6 +222,101 @@
     if (state.nativeOverrideActive && button === state.nativeDownloadButton) {
       updateNativeDownloadButton(metadata);
     }
+  }
+
+  function syncNativePrintButton(metadata = readReaderMetadata()) {
+    const button = document.getElementById("action-7");
+    if (button !== state.nativePrintButton) {
+      releaseNativePrintButton();
+      if (!button) {
+        return;
+      }
+
+      state.nativePrintButton = button;
+      state.nativePrintButtonObserver = new MutationObserver(() => {
+        syncNativePrintButton();
+      });
+      state.nativePrintButtonObserver.observe(button, {
+        attributes: true,
+        attributeFilter: ["class", "disabled"]
+      });
+    }
+
+    if (!state.nativePrintOverrideActive && isNativeButtonDisabled(button)) {
+      beginNativePrintOverride(button);
+    }
+
+    if (state.nativePrintOverrideActive && button === state.nativePrintButton) {
+      updateNativePrintButton(metadata);
+    }
+  }
+
+  function beginNativePrintOverride(button) {
+    state.nativePrintSnapshot = {
+      disabled: button.disabled,
+      disabledClass: button.classList.contains("button-disabled"),
+      enabledClass: button.classList.contains("button-enabled"),
+      ariaLabel: button.getAttribute("aria-label"),
+      title: button.getAttribute("title"),
+      ariaHaspopup: button.getAttribute("aria-haspopup"),
+      ariaExpanded: button.getAttribute("aria-expanded"),
+      ariaBusy: button.getAttribute("aria-busy")
+    };
+    state.nativePrintClickHandler = handleNativePrintClick;
+    state.nativePrintOverrideActive = true;
+    button.addEventListener("click", state.nativePrintClickHandler, true);
+    button.setAttribute("data-calameo-pdf-print-override", "true");
+  }
+
+  function updateNativePrintButton(metadata) {
+    const button = state.nativePrintButton;
+    if (!button || !state.nativePrintOverrideActive) {
+      return;
+    }
+
+    const canPrint = metadata.pageCount > 0 && Boolean(metadata.pageTemplate);
+    if (button.disabled !== !canPrint) {
+      button.disabled = !canPrint;
+    }
+    button.classList.toggle("button-disabled", !canPrint);
+    button.classList.toggle("button-enabled", canPrint);
+    button.setAttribute("aria-label", canPrint ? "Imprimer le document complet" : "Préparation du document pour l’impression");
+    button.setAttribute("title", canPrint ? "Imprimer le PDF complet" : "Le lecteur prépare les pages pour l’impression");
+  }
+
+  function releaseNativePrintButton() {
+    const button = state.nativePrintButton;
+    if (button && state.nativePrintClickHandler) {
+      button.removeEventListener("click", state.nativePrintClickHandler, true);
+    }
+    state.nativePrintButtonObserver?.disconnect();
+
+    if (button && state.nativePrintOverrideActive && state.nativePrintSnapshot) {
+      button.disabled = state.nativePrintSnapshot.disabled;
+      button.classList.toggle("button-disabled", state.nativePrintSnapshot.disabledClass);
+      button.classList.toggle("button-enabled", state.nativePrintSnapshot.enabledClass);
+      restoreAttribute(button, "aria-label", state.nativePrintSnapshot.ariaLabel);
+      restoreAttribute(button, "title", state.nativePrintSnapshot.title);
+      restoreAttribute(button, "aria-haspopup", state.nativePrintSnapshot.ariaHaspopup);
+      restoreAttribute(button, "aria-expanded", state.nativePrintSnapshot.ariaExpanded);
+      restoreAttribute(button, "aria-busy", state.nativePrintSnapshot.ariaBusy);
+      button.removeAttribute("data-calameo-pdf-print-override");
+    }
+
+    state.nativePrintButton = null;
+    state.nativePrintClickHandler = null;
+    state.nativePrintButtonObserver = null;
+    state.nativePrintSnapshot = null;
+    state.nativePrintOverrideActive = false;
+  }
+
+  function handleNativePrintClick(event) {
+    if (!state.nativePrintOverrideActive || event.currentTarget !== state.nativePrintButton) {
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    startPdfPrint();
   }
 
   function beginNativeDownloadOverride(button) {
@@ -414,10 +518,14 @@
 
     event.preventDefault();
     event.stopImmediatePropagation();
+    startPdfPrint();
+  }
+
+  function startPdfPrint() {
     const metadata = readReaderMetadata();
     if (!metadata.pageCount || !metadata.pageTemplate) {
       togglePanel();
-      showMessage("Le lecteur prépare encore les pages. Attends que la première page apparaisse, puis réessaie Ctrl+P.", "error");
+      showMessage("Le lecteur prépare encore les pages. Attends que la première page apparaisse, puis réessaie.", "error");
       return;
     }
     if (metadata.pageCount > 2000) {
@@ -434,11 +542,58 @@
 
     schedulePdfPreparation(metadata, true);
     const printUrl = `${chrome.runtime.getURL("print.html")}?key=${encodeURIComponent(cacheKey)}`;
-    const printWindow = window.open(printUrl, "_blank");
-    if (!printWindow) {
-      togglePanel();
-      showMessage("Autorise la fenêtre d’impression pour afficher le PDF complet.", "error");
+    openPrintFrame(printUrl);
+  }
+
+  function openPrintFrame(printUrl) {
+    if (state.printFrameHost?.isConnected) {
+      state.printFrame?.contentWindow?.focus();
+      return;
     }
+
+    const host = document.createElement("div");
+    host.id = "calameo-pdf-print-host";
+    host.setAttribute("aria-hidden", "true");
+    // Keep the PDF frame out of the reader UI. Printing is delegated to the
+    // browser's PDF handler, so the user only sees the native print dialog.
+    host.style.cssText = "position:fixed;left:0;top:0;z-index:2147483647;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;";
+
+    const frame = document.createElement("iframe");
+    frame.id = "calameo-pdf-print-frame";
+    frame.title = "Impression du PDF Calaméo";
+    frame.tabIndex = -1;
+    frame.src = printUrl;
+    frame.style.cssText = "display:block;width:1px;height:1px;border:0;";
+    host.appendChild(frame);
+    (document.documentElement || document.body).appendChild(host);
+
+    state.printFrameHost = host;
+    state.printFrame = frame;
+  }
+
+  function handlePrintFrameMessage(event) {
+    if (
+      !state.printFrame
+      || event.source !== state.printFrame.contentWindow
+      || event.origin !== new URL(chrome.runtime.getURL("")).origin
+      || event.data?.source !== "calameo-pdf-export"
+    ) {
+      return;
+    }
+
+    if (event.data.type === "PRINT_CLOSED") {
+      closePrintFrame();
+    } else if (event.data.type === "PRINT_ERROR") {
+      closePrintFrame();
+      togglePanel();
+      showMessage(event.data.message || "Impossible d’ouvrir l’impression du PDF complet.", "error");
+    }
+  }
+
+  function closePrintFrame() {
+    state.printFrameHost?.remove();
+    state.printFrameHost = null;
+    state.printFrame = null;
   }
 
   async function startExport() {

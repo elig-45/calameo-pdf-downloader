@@ -1,9 +1,13 @@
 "use strict";
 
-importScripts("shared.js");
+if (typeof importScripts === "function") {
+  importScripts("shared.js");
+}
 
 const OFFSCREEN_PATH = "offscreen.html";
 const OFFSCREEN_URL = chrome.runtime.getURL(OFFSCREEN_PATH);
+const INLINE_PROCESSOR = typeof document !== "undefined" && !chrome.offscreen;
+const downloadStorage = chrome.storage.session || chrome.storage.local;
 const DOWNLOAD_RECORD_PREFIX = "calameo-pdf-download:";
 let offscreenCreation;
 const activeJobs = new Set();
@@ -45,8 +49,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false;
     }
 
-    chrome.runtime.sendMessage({
-      target: "calameo-pdf-offscreen",
+    sendOffscreenMessage({
       type: "CANCEL_JOB",
       requestId: message.requestId
     }).catch(() => {});
@@ -55,45 +58,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (sender.url === OFFSCREEN_URL) {
-    if (message.type === "CALAMEO_PDF_STATUS") {
-      forwardToTab(message.tabId, {
-        type: "CALAMEO_PDF_PROGRESS",
-        requestId: message.requestId,
-        phase: message.phase,
-        completed: message.completed,
-        total: message.total,
-        detail: message.detail
-      });
-      sendResponse({ ok: true });
-      return false;
-    }
-
-    if (message.type === "CALAMEO_PDF_DOWNLOAD") {
-      startDownload(message)
-        .then(sendResponse)
-        .catch((error) => sendResponse({ ok: false, error: readableError(error) }));
-      return true;
-    }
-
-    if (message.type === "CALAMEO_PDF_OFFSCREEN_IDLE") {
-      activeJobs.delete(String(message.requestId || ""));
-      preparationJobs.delete(String(message.requestId || ""));
-      if (activeJobs.size === 0 && preparationJobs.size === 0) {
-        scheduleOffscreenClose();
-      }
-      sendResponse({ ok: true });
-      return false;
-    }
+    handleOffscreenEvent(message)
+      .then(sendResponse)
+      .catch((error) => sendResponse({ ok: false, error: readableError(error) }));
+    return true;
   }
 
   return false;
 });
 
+globalThis.CalameoPdfBackgroundBridge = handleOffscreenEvent;
+
+async function handleOffscreenEvent(message) {
+  if (message.type === "CALAMEO_PDF_STATUS") {
+    await forwardToTab(message.tabId, {
+      type: "CALAMEO_PDF_PROGRESS",
+      requestId: message.requestId,
+      phase: message.phase,
+      completed: message.completed,
+      total: message.total,
+      detail: message.detail
+    });
+    return { ok: true };
+  }
+
+  if (message.type === "CALAMEO_PDF_DOWNLOAD") {
+    return startDownload(message);
+  }
+
+  if (message.type === "CALAMEO_PDF_OFFSCREEN_IDLE") {
+    activeJobs.delete(String(message.requestId || ""));
+    preparationJobs.delete(String(message.requestId || ""));
+    if (activeJobs.size === 0 && preparationJobs.size === 0) {
+      scheduleOffscreenClose();
+    }
+    return { ok: true };
+  }
+
+  return { ok: false };
+}
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   for (const [requestId, preparation] of preparationJobs) {
     if (preparation.tabId === tabId) {
-      chrome.runtime.sendMessage({
-        target: "calameo-pdf-offscreen",
+      sendOffscreenMessage({
         type: "CANCEL_JOB",
         requestId
       }).catch(() => {});
@@ -121,8 +129,7 @@ async function startOffscreenJob(message, tabId) {
   activeJobs.add(job.requestId);
   let result;
   try {
-    result = await chrome.runtime.sendMessage({
-      target: "calameo-pdf-offscreen",
+    result = await sendOffscreenMessage({
       type: "START_JOB",
       requestId: job.requestId,
       tabId,
@@ -156,8 +163,7 @@ async function startOffscreenPreparation(message, tabId) {
       return { ok: true, requestId };
     }
     if (activePreparation.tabId === tabId) {
-      chrome.runtime.sendMessage({
-        target: "calameo-pdf-offscreen",
+      sendOffscreenMessage({
         type: "CANCEL_JOB",
         requestId
       }).catch(() => {});
@@ -176,8 +182,7 @@ async function startOffscreenPreparation(message, tabId) {
   preparationJobs.set(preparation.requestId, { tabId, cacheKey: preparation.cacheKey });
   let result;
   try {
-    result = await chrome.runtime.sendMessage({
-      target: "calameo-pdf-offscreen",
+    result = await sendOffscreenMessage({
       type: "PREPARE_FULL",
       requestId: preparation.requestId,
       tabId,
@@ -263,6 +268,13 @@ function validatePageTemplate(rawPageTemplate) {
 }
 
 async function ensureOffscreenDocument() {
+  if (INLINE_PROCESSOR) {
+    if (typeof globalThis.CalameoPdfOffscreenBridge !== "function") {
+      throw new Error("Le moteur d’export Firefox n’a pas fini de démarrer.");
+    }
+    return;
+  }
+
   if (offscreenCreation) {
     await offscreenCreation;
     return;
@@ -289,6 +301,17 @@ async function ensureOffscreenDocument() {
   }
 }
 
+function sendOffscreenMessage(message) {
+  const payload = { target: "calameo-pdf-offscreen", ...message };
+  if (INLINE_PROCESSOR) {
+    if (typeof globalThis.CalameoPdfOffscreenBridge !== "function") {
+      return Promise.reject(new Error("Le moteur d’export Firefox n’est pas disponible."));
+    }
+    return Promise.resolve().then(() => globalThis.CalameoPdfOffscreenBridge(payload));
+  }
+  return chrome.runtime.sendMessage(payload);
+}
+
 async function startDownload(message) {
   const requestId = String(message.requestId || "");
   const tabId = Number(message.tabId);
@@ -312,7 +335,7 @@ async function startDownload(message) {
   });
 
   const recordKey = `${DOWNLOAD_RECORD_PREFIX}${downloadId}`;
-  await chrome.storage.session.set({
+  await downloadStorage.set({
     [recordKey]: { requestId, tabId }
   });
 
@@ -332,22 +355,21 @@ async function startDownload(message) {
 
 async function finishDownload(downloadId, state) {
   const recordKey = `${DOWNLOAD_RECORD_PREFIX}${downloadId}`;
-  const stored = await chrome.storage.session.get(recordKey);
+  const stored = await downloadStorage.get(recordKey);
   const record = stored[recordKey];
   if (!record || finishedDownloadIds.has(downloadId)) {
     return;
   }
 
   finishedDownloadIds.add(downloadId);
-  await chrome.storage.session.remove(recordKey);
+  await downloadStorage.remove(recordKey);
   await forwardToTab(record.tabId, {
     type: "CALAMEO_PDF_PROGRESS",
     requestId: record.requestId,
     phase: state === "complete" ? "complete" : "download-error"
   });
 
-  chrome.runtime.sendMessage({
-    target: "calameo-pdf-offscreen",
+  sendOffscreenMessage({
     type: "REVOKE_DOWNLOAD_URL",
     requestId: record.requestId
   }).catch(() => {});
@@ -357,13 +379,16 @@ async function finishDownload(downloadId, state) {
 }
 
 function scheduleOffscreenClose() {
+  if (INLINE_PROCESSOR) {
+    return;
+  }
   setTimeout(async () => {
     try {
       if (activeJobs.size > 0 || preparationJobs.size > 0) {
         return;
       }
 
-      const stored = await chrome.storage.session.get(null);
+      const stored = await downloadStorage.get(null);
       const hasPendingDownloads = Object.keys(stored).some((key) => key.startsWith(DOWNLOAD_RECORD_PREFIX));
       if (hasPendingDownloads) {
         scheduleOffscreenClose();

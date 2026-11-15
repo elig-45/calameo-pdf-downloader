@@ -7,18 +7,18 @@
   const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
   const POLL_INTERVAL_MS = 500;
   const cacheKey = new URLSearchParams(location.search).get("key") || "";
-  const statusNode = document.getElementById("status");
   const preview = document.getElementById("pdf-preview");
-  const printButton = document.getElementById("print-button");
   let previewUrl = "";
 
-  printButton.addEventListener("click", printPdf);
-  window.addEventListener("afterprint", () => {
+  window.addEventListener("afterprint", finishPrint);
+
+  function finishPrint() {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
       previewUrl = "";
     }
-  });
+    notifyParent("PRINT_CLOSED");
+  }
   window.addEventListener("pagehide", () => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
@@ -65,21 +65,30 @@
     previewUrl = URL.createObjectURL(pdfBlob);
     preview.hidden = false;
     preview.addEventListener("load", () => {
-      printButton.hidden = false;
-      statusNode.textContent = "Le PDF complet est prêt. Ouverture de la fenêtre d’impression…";
+      try {
+        preview.contentWindow.addEventListener("afterprint", finishPrint, { once: true });
+      } catch {
+        // The browser PDF viewer may not expose its inner window.
+      }
       window.setTimeout(printPdf, 1000);
     }, { once: true });
     preview.src = previewUrl;
   }
 
   function printPdf() {
-    window.focus();
-    window.print();
+    try {
+      preview.contentWindow.print();
+    } catch {
+      showError("Impossible d’ouvrir l’impression du PDF complet.");
+    }
   }
 
   function showError(message) {
-    statusNode.textContent = message;
-    printButton.hidden = true;
+    notifyParent("PRINT_ERROR", message);
+  }
+
+  function notifyParent(type, message) {
+    window.parent.postMessage({ source: "calameo-pdf-export", type, message }, "*");
   }
 
   function readPreparedDocument(key) {
