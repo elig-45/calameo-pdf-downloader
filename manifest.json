@@ -35,8 +35,8 @@
         "print.js"
       ],
       "matches": [
-        "https://www.calameo.com/read/*",
-        "https://calameo.com/read/*"
+        "https://www.calameo.com/*",
+        "https://calameo.com/*"
       ]
     }
   ]
