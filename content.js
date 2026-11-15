@@ -14,6 +14,8 @@
     currentRequestId: null,
     terminalRequestId: null,
     busy: false,
+    preparingDocumentKey: null,
+    preparationRetryAfter: 0,
     observer: null
   };
 
@@ -47,6 +49,8 @@
 
     window.addEventListener("resize", positionPanel);
     window.addEventListener("scroll", positionPanel, true);
+    document.addEventListener("keydown", handlePrintShortcut, true);
+    document.addEventListener("visibilitychange", () => refreshMetadata());
     chrome.runtime.onMessage.addListener(handleRuntimeMessage);
   }
 
@@ -153,13 +157,16 @@
 
     const metadata = readReaderMetadata();
     syncNativeDownloadButton(metadata);
+    const canExport = metadata.pageCount > 0 && Boolean(metadata.pageTemplate);
+    if (canExport && !state.busy) {
+      schedulePdfPreparation(metadata);
+    }
     if (state.busy) {
       return;
     }
 
     const metaNode = getElement("book-meta");
     const exportButton = getElement("export");
-    const canExport = metadata.pageCount > 0 && Boolean(metadata.pageTemplate);
 
     const metaText = metadata.pageCount
       ? `${metadata.pageCount} ${metadata.pageCount === 1 ? "page" : "pages"} dans cette publication`
@@ -329,6 +336,111 @@
     return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
   }
 
+  function schedulePdfPreparation(metadata = readReaderMetadata(), force = false) {
+    if (
+      !metadata.pageCount
+      || !metadata.pageTemplate
+      || (!force && metadata.pageCount > 500)
+      || document.visibilityState === "hidden"
+      || Date.now() < state.preparationRetryAfter
+    ) {
+      return;
+    }
+
+    const cacheKey = CalameoPdfShared.documentCacheKey(metadata.pageTemplate, metadata.pageCount, metadata.title);
+    if (!cacheKey || (!force && state.preparingDocumentKey === cacheKey)) {
+      return;
+    }
+    state.preparingDocumentKey = cacheKey;
+
+    const start = () => {
+      const current = readReaderMetadata();
+      const currentKey = CalameoPdfShared.documentCacheKey(current.pageTemplate, current.pageCount, current.title);
+      if (state.busy || document.visibilityState === "hidden" || currentKey !== cacheKey) {
+        if (state.preparingDocumentKey === cacheKey) {
+          state.preparingDocumentKey = null;
+        }
+        return;
+      }
+
+      chrome.runtime.sendMessage({
+        type: "CALAMEO_PDF_PREPARE",
+        requestId: createRequestId(),
+        pageCount: metadata.pageCount,
+        pageTemplate: metadata.pageTemplate,
+        title: metadata.title,
+        force
+      }).then((result) => {
+        if (!result?.ok && state.preparingDocumentKey === cacheKey) {
+          state.preparingDocumentKey = null;
+          state.preparationRetryAfter = Date.now() + 5000;
+          window.setTimeout(() => {
+            if (!state.busy) {
+              schedulePdfPreparation(readReaderMetadata(), force);
+            }
+          }, 5500);
+        }
+      }).catch(() => {
+        if (state.preparingDocumentKey === cacheKey) {
+          state.preparingDocumentKey = null;
+          state.preparationRetryAfter = Date.now() + 5000;
+          window.setTimeout(() => {
+            if (!state.busy) {
+              schedulePdfPreparation(readReaderMetadata(), force);
+            }
+          }, 5500);
+        }
+      });
+    };
+
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(start, { timeout: 2500 });
+    } else {
+      window.setTimeout(start, 1200);
+    }
+  }
+
+  function handlePrintShortcut(event) {
+    if (
+      event.defaultPrevented
+      || event.repeat
+      || (!event.ctrlKey && !event.metaKey)
+      || event.altKey
+      || event.shiftKey
+      || String(event.key).toLowerCase() !== "p"
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const metadata = readReaderMetadata();
+    if (!metadata.pageCount || !metadata.pageTemplate) {
+      togglePanel();
+      showMessage("Le lecteur prépare encore les pages. Attends que la première page apparaisse, puis réessaie Ctrl+P.", "error");
+      return;
+    }
+    if (metadata.pageCount > 2000) {
+      togglePanel();
+      showMessage("Cette publication dépasse la limite d’impression directe de 2 000 pages. Utilise Créer le PDF dans le panneau.", "error");
+      return;
+    }
+
+    const cacheKey = CalameoPdfShared.documentCacheKey(metadata.pageTemplate, metadata.pageCount, metadata.title);
+    if (!cacheKey) {
+      showMessage("Impossible d’identifier cette publication pour l’impression.", "error");
+      return;
+    }
+
+    schedulePdfPreparation(metadata, true);
+    const printUrl = `${chrome.runtime.getURL("print.html")}?key=${encodeURIComponent(cacheKey)}`;
+    const printWindow = window.open(printUrl, "_blank");
+    if (!printWindow) {
+      togglePanel();
+      showMessage("Autorise la fenêtre d’impression pour afficher le PDF complet.", "error");
+    }
+  }
+
   async function startExport() {
     if (state.busy) {
       return;
@@ -353,6 +465,7 @@
     const title = metadata.title;
     const suffix = getMode() === "all" ? "" : `-selection-${pages.length}-pages`;
     const requestId = createRequestId();
+    state.preparingDocumentKey = null;
     state.currentRequestId = requestId;
     state.terminalRequestId = null;
     setBusy(true);
@@ -411,6 +524,7 @@
         getElement("cancel").hidden = true;
         setBusy(false);
         setStatus("Téléchargement du PDF en cours dans Téléchargements.", "normal");
+        schedulePdfPreparation(readReaderMetadata());
         break;
       case "complete":
         state.terminalRequestId = message.requestId;
@@ -425,6 +539,7 @@
         state.terminalRequestId = message.requestId;
         setBusy(false);
         setStatus("Export annulé.", "muted");
+        schedulePdfPreparation(readReaderMetadata());
         break;
       case "error":
         state.terminalRequestId = message.requestId;

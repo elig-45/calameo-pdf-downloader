@@ -4,6 +4,12 @@ const OFFSCREEN_TARGET = "calameo-pdf-offscreen";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const XLINK_NS = "http://www.w3.org/1999/xlink";
 const PDF_REFERENCE_EDGE_PT = 842;
+const PREPARED_PDF_DATABASE = "calameo-pdf-prepared";
+const PREPARED_PDF_STORE = "documents";
+const PREPARED_PDF_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const PREPARE_MAX_PAGES = 500;
+const PREPARE_FORCED_MAX_PAGES = 2000;
+const PREPARED_PDF_MAX_BYTES = 128 * 1024 * 1024;
 const jobs = new Map();
 const downloadUrls = new Map();
 
@@ -14,15 +20,64 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "START_JOB") {
     const requestId = String(message.requestId || "");
+    const activePreparation = [...jobs.values()].find((job) => job.kind === "prepare");
+    if (activePreparation) {
+      const requestedCacheKey = CalameoPdfShared.documentCacheKey(
+        message.pageTemplate,
+        message.pageCount,
+        message.title
+      );
+      if (isFullDocumentJob(message) && requestedCacheKey === activePreparation.cacheKey) {
+        activePreparation.pendingExport = {
+          requestId,
+          tabId: Number(message.tabId),
+          pageCount: Number(message.pageCount)
+        };
+        void report(
+          activePreparation.tabId,
+          requestId,
+          "fetching",
+          0,
+          Number(message.pageCount),
+          "Préparation du PDF complet en arrière-plan…"
+        );
+      } else {
+        activePreparation.controller.abort();
+      }
+      activePreparation.done
+        .then(() => startExportJob(message, sendResponse))
+        .catch(() => sendResponse({ ok: false, error: "La préparation en arrière-plan n'a pas pu être interrompue." }));
+      return true;
+    }
+
     if (jobs.size > 0) {
       sendResponse({ ok: false, error: "Un autre export PDF est déjà en cours." });
       return false;
     }
 
+    startExportJob(message, sendResponse);
+    return false;
+  }
+
+  if (message.type === "PREPARE_FULL") {
+    const requestId = String(message.requestId || "");
+    if (jobs.size > 0) {
+      sendResponse({ ok: false, error: "Une autre opération PDF est déjà en cours." });
+      return false;
+    }
+
     const controller = new AbortController();
-    jobs.set(requestId, { controller, tabId: Number(message.tabId) });
-    sendResponse({ ok: true });
-    void runExport(message, controller.signal);
+    const job = {
+      controller,
+      kind: "prepare",
+      tabId: Number(message.tabId),
+      cacheKey: CalameoPdfShared.documentCacheKey(message.pageTemplate, message.pageCount, message.title),
+      done: null
+    };
+    jobs.set(requestId, job);
+    job.done = runPreparation(message, controller.signal, job)
+      .finally(() => jobs.delete(requestId));
+    sendResponse({ ok: true, requestId });
     return false;
   }
 
@@ -41,28 +96,123 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
+function startExportJob(message, sendResponse) {
+  const requestId = String(message.requestId || "");
+  if (jobs.size > 0) {
+    sendResponse({ ok: false, error: "Un autre export PDF est déjà en cours." });
+    return;
+  }
+
+  const controller = new AbortController();
+  const job = { controller, kind: "export", tabId: Number(message.tabId), done: null };
+  jobs.set(requestId, job);
+  sendResponse({ ok: true });
+  job.done = runExport(message, controller.signal)
+    .finally(() => jobs.delete(requestId));
+}
+
+async function runPreparation(job, signal, jobState) {
+  const requestId = String(job.requestId || "");
+  const pageCount = Number(job.pageCount);
+  const title = String(job.title || "Publication Calaméo");
+  const force = Boolean(job.force);
+  const maxPages = force ? PREPARE_FORCED_MAX_PAGES : PREPARE_MAX_PAGES;
+  const maxBytes = PREPARED_PDF_MAX_BYTES;
+  const cacheKey = CalameoPdfShared.documentCacheKey(job.pageTemplate, pageCount, title);
+
+  try {
+    if (pageCount < 1 || pageCount > maxPages || !cacheKey) {
+      return;
+    }
+    if (await readPreparedPdf(cacheKey, pageCount, title)) {
+      return;
+    }
+
+    const writer = new PdfWriter(pageCount, title);
+    let imageBytes = 0;
+    for (let index = 0; index < pageCount; index += 1) {
+      throwIfAborted(signal);
+      const svgText = await fetchPageSvg(job.pageTemplate, index + 1, signal);
+      const pageImage = await extractPageImage(svgText);
+      throwIfAborted(signal);
+      imageBytes += pageImage.bytes.length;
+      if (imageBytes > maxBytes) {
+        throw new Error("Le PDF dépasse la taille de préparation en arrière-plan.");
+      }
+      writer.appendPage(pageImage, index);
+      if (jobState.pendingExport) {
+        await report(
+          jobState.pendingExport.tabId,
+          jobState.pendingExport.requestId,
+          "fetching",
+          index + 1,
+          pageCount,
+          `Préparation de la page ${index + 1}…`
+        );
+      }
+    }
+
+    throwIfAborted(signal);
+    const pdfBlob = writer.finish();
+    await writePreparedPdf(cacheKey, pageCount, title, pdfBlob);
+  } catch (error) {
+    if (!signal.aborted) {
+      await writePreparationFailure(cacheKey, pageCount, title, readableError(error)).catch(() => {});
+    }
+  } finally {
+    await chrome.runtime.sendMessage({
+      type: "CALAMEO_PDF_OFFSCREEN_IDLE",
+      requestId
+    }).catch(() => {});
+  }
+}
+
+function isFullDocumentJob(job) {
+  const pageCount = Number(job.pageCount);
+  return Array.isArray(job.pages)
+    && job.pages.length === pageCount
+    && job.pages.every((page, index) => Number(page) === index + 1);
+}
+
 async function runExport(job, signal) {
   const requestId = String(job.requestId || "");
   const tabId = Number(job.tabId);
 
   try {
-    const writer = new PdfWriter(job.pages.length, job.title);
+    const isFullDocument = job.pages.length === job.pageCount
+      && job.pages.every((page, index) => page === index + 1);
+    const cacheKey = CalameoPdfShared.documentCacheKey(job.pageTemplate, job.pageCount, job.title);
+    let pdfBlob = isFullDocument
+      ? await readPreparedPdf(cacheKey, job.pageCount, job.title)
+      : null;
 
-    for (let index = 0; index < job.pages.length; index += 1) {
-      throwIfAborted(signal);
-      const pageNumber = job.pages[index];
-      await report(tabId, requestId, "fetching", index, job.pages.length, `Lecture de la page ${pageNumber}…`);
-      const svgText = await fetchPageSvg(job.pageTemplate, pageNumber, signal);
-      const pageImage = await extractPageImage(svgText);
-      throwIfAborted(signal);
+    if (pdfBlob) {
+      await report(tabId, requestId, "assembling", job.pages.length, job.pages.length, "PDF complet déjà préparé en arrière-plan…");
+    } else {
+      const writer = new PdfWriter(job.pages.length, job.title);
+      let imageBytes = 0;
+      for (let index = 0; index < job.pages.length; index += 1) {
+        throwIfAborted(signal);
+        const pageNumber = job.pages[index];
+        await report(tabId, requestId, "fetching", index, job.pages.length, `Lecture de la page ${pageNumber}…`);
+        const svgText = await fetchPageSvg(job.pageTemplate, pageNumber, signal);
+        const pageImage = await extractPageImage(svgText);
+        throwIfAborted(signal);
 
-      writer.appendPage(pageImage, index);
-      await report(tabId, requestId, "fetching", index + 1, job.pages.length, `Page ${pageNumber} prête`);
+        writer.appendPage(pageImage, index);
+        imageBytes += pageImage.bytes.length;
+        await report(tabId, requestId, "fetching", index + 1, job.pages.length, `Page ${pageNumber} prête`);
+      }
+
+      throwIfAborted(signal);
+      await report(tabId, requestId, "assembling", job.pages.length, job.pages.length, "Création du PDF…");
+      pdfBlob = writer.finish();
+      if (isFullDocument && imageBytes <= PREPARED_PDF_MAX_BYTES && pdfBlob.size <= PREPARED_PDF_MAX_BYTES) {
+        await writePreparedPdf(cacheKey, job.pageCount, job.title, pdfBlob).catch(() => {});
+      }
     }
 
     throwIfAborted(signal);
-    await report(tabId, requestId, "assembling", job.pages.length, job.pages.length, "Création du PDF…");
-    const pdfBlob = writer.finish();
     const blobUrl = URL.createObjectURL(pdfBlob);
     downloadUrls.set(requestId, blobUrl);
 
@@ -145,6 +295,108 @@ async function fetchPageSvg(template, pageNumber, signal) {
   }
 
   return new TextDecoder("utf-8").decode(bytes);
+}
+
+async function readPreparedPdf(cacheKey, pageCount, title) {
+  if (!cacheKey) {
+    return null;
+  }
+
+  const database = await openPreparedDatabase();
+  const record = await new Promise((resolve, reject) => {
+    const transaction = database.transaction(PREPARED_PDF_STORE, "readonly");
+    const request = transaction.objectStore(PREPARED_PDF_STORE).get(cacheKey);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+    transaction.oncomplete = () => database.close();
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error);
+    };
+  });
+
+  if (!record) {
+    return null;
+  }
+
+  const isCurrent = record.status === "ready"
+    && record.pageCount === pageCount
+    && record.title === title
+    && Date.now() - record.createdAt <= PREPARED_PDF_TTL_MS
+    && record.pdf instanceof Blob
+    && record.pdf.size > 0;
+  if (!isCurrent) {
+    await deletePreparedRecord(cacheKey).catch(() => {});
+    return null;
+  }
+  return record.pdf;
+}
+
+async function writePreparedPdf(cacheKey, pageCount, title, pdfBlob) {
+  if (!cacheKey || !(pdfBlob instanceof Blob) || pdfBlob.size === 0 || pdfBlob.size > PREPARED_PDF_MAX_BYTES) {
+    return false;
+  }
+
+  await writePreparedRecord({
+    key: cacheKey,
+    status: "ready",
+    pageCount,
+    title,
+    createdAt: Date.now(),
+    pdf: pdfBlob
+  });
+  return true;
+}
+
+async function writePreparationFailure(cacheKey, pageCount, title, error) {
+  if (!cacheKey) {
+    return;
+  }
+  await writePreparedRecord({
+    key: cacheKey,
+    status: "failed",
+    pageCount,
+    title,
+    createdAt: Date.now(),
+    error: String(error || "")
+  });
+}
+
+async function writePreparedRecord(record) {
+  const database = await openPreparedDatabase();
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction(PREPARED_PDF_STORE, "readwrite");
+    const store = transaction.objectStore(PREPARED_PDF_STORE);
+    store.clear();
+    store.put(record);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error || new Error("Le cache PDF local n'a pas pu être enregistré."));
+  }).finally(() => database.close());
+}
+
+async function deletePreparedRecord(cacheKey) {
+  const database = await openPreparedDatabase();
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction(PREPARED_PDF_STORE, "readwrite");
+    transaction.objectStore(PREPARED_PDF_STORE).delete(cacheKey);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error || new Error("Le cache PDF local n'a pas pu être supprimé."));
+  }).finally(() => database.close());
+}
+
+function openPreparedDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(PREPARED_PDF_DATABASE, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(PREPARED_PDF_STORE)) {
+        request.result.createObjectStore(PREPARED_PDF_STORE, { keyPath: "key" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 }
 
 function createPageUrl(template, pageNumber) {

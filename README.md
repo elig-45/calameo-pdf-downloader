@@ -7,6 +7,8 @@ Extension Chrome Manifest V3 qui ajoute un bouton **PDF** au lecteur Calaméo. E
 - Réutilisation du bouton natif **Télécharger** lorsque Calaméo le désactive : il ouvre alors les choix d’export PDF.
 - Export de toutes les pages ou d'une sélection, par exemple `1-3, 8, 12-15`.
 - Barre de progression et annulation pendant la lecture des pages ; le panneau redevient disponible dès que Chrome accepte le téléchargement.
+- Préparation discrète du PDF complet en arrière-plan pour réduire l’attente au clic sur **Créer le PDF**.
+- Interception de **Ctrl+P** dans le lecteur et ouverture du PDF complet dans la fenêtre d’impression du navigateur.
 - PDF assemblé localement dans le navigateur, sans service de conversion externe.
 - Nom de fichier dérivé du titre de la publication.
 - Compatible avec Chrome, Brave et Edge sous Chromium 116 ou plus récent.
@@ -36,7 +38,7 @@ Les pages sont ajoutées dans l'ordre croissant et les doublons sont supprimés.
 
 ## Fonctionnement et confidentialité
 
-Le lecteur charge les images de pages SVG Calaméo. L'extension lit le lien signé déjà présent dans le lecteur, récupère les pages choisies sur les serveurs d'images Calaméo, puis assemble les images dans un PDF local. Le lien signé n'est ni enregistré ni transmis à un service tiers. Aucun fichier n'est envoyé à un serveur de conversion.
+Le lecteur charge les images de pages SVG Calaméo. L'extension lit le lien signé déjà présent dans le lecteur, récupère les pages choisies sur les serveurs d'images Calaméo, puis assemble les images dans un PDF local. Le lien signé n'est ni enregistré ni transmis à un service tiers. Le PDF complet préparé reste réutilisable pendant sept jours dans le stockage local de l’extension ; une copie expirée est écartée lors de la prochaine vérification du cache. Aucun fichier n'est envoyé à un serveur de conversion.
 
 Le PDF est un document image : le texte reconnu ou affiché dans une publication n'est pas ajouté comme calque OCR sélectionnable. Les liens interactifs et médias du lecteur ne sont pas reproduits.
 
@@ -45,6 +47,7 @@ Le PDF est un document image : le texte reconnu ou affiché dans une publication
 - Le lecteur doit avoir chargé au moins une page et fournir le nombre total de pages dans ses métadonnées.
 - Les pages doivent être accessibles avec le lien de ressource fourni pendant la session du lecteur.
 - Les publications très volumineuses peuvent demander beaucoup de mémoire au navigateur.
+- La préparation anticipée silencieuse est limitée aux publications de 500 pages ; **Ctrl+P** force la préparation jusqu’à 2 000 pages. Les deux modes préparent au plus 128 Mio ; au-delà, utilise l’export PDF normal.
 
 ## Structure
 
@@ -52,3 +55,4 @@ Le PDF est un document image : le texte reconnu ou affiché dans une publication
 - `content.js` : adaptation du bouton de téléchargement désactivé, interface et saisie des pages.
 - `background.js` : messages, téléchargement local et cycle de vie du document hors écran.
 - `offscreen.html` / `offscreen.js` : lecture des pages et génération PDF.
+- `print.html` / `print.js` : affichage et impression du PDF complet avec Ctrl+P.

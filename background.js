@@ -1,15 +1,30 @@
 "use strict";
 
+importScripts("shared.js");
+
 const OFFSCREEN_PATH = "offscreen.html";
 const OFFSCREEN_URL = chrome.runtime.getURL(OFFSCREEN_PATH);
 const DOWNLOAD_RECORD_PREFIX = "calameo-pdf-download:";
 let offscreenCreation;
 const activeJobs = new Set();
+const preparationJobs = new Map();
 const finishedDownloadIds = new Set();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") {
     return false;
+  }
+
+  if (message.type === "CALAMEO_PDF_PREPARE") {
+    if (!isCalameoReader(sender.url) || !Number.isInteger(sender.tab?.id)) {
+      sendResponse({ ok: false });
+      return false;
+    }
+
+    startOffscreenPreparation(message, sender.tab.id)
+      .then(sendResponse)
+      .catch((error) => sendResponse({ ok: false, error: readableError(error) }));
+    return true;
   }
 
   if (message.type === "CALAMEO_PDF_START") {
@@ -62,7 +77,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === "CALAMEO_PDF_OFFSCREEN_IDLE") {
       activeJobs.delete(String(message.requestId || ""));
-      if (activeJobs.size === 0) {
+      preparationJobs.delete(String(message.requestId || ""));
+      if (activeJobs.size === 0 && preparationJobs.size === 0) {
         scheduleOffscreenClose();
       }
       sendResponse({ ok: true });
@@ -71,6 +87,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   return false;
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  for (const [requestId, preparation] of preparationJobs) {
+    if (preparation.tabId === tabId) {
+      chrome.runtime.sendMessage({
+        target: "calameo-pdf-offscreen",
+        type: "CANCEL_JOB",
+        requestId
+      }).catch(() => {});
+      preparationJobs.delete(requestId);
+    }
+  }
 });
 
 chrome.downloads.onChanged.addListener((delta) => {
@@ -116,6 +145,60 @@ async function startOffscreenJob(message, tabId) {
   return { ok: true, requestId: job.requestId };
 }
 
+async function startOffscreenPreparation(message, tabId) {
+  const preparation = validatePreparation(message);
+  if (activeJobs.size > 0) {
+    return { ok: false, error: "Un export PDF est déjà en cours." };
+  }
+
+  for (const [requestId, activePreparation] of preparationJobs) {
+    if (activePreparation.tabId === tabId && activePreparation.cacheKey === preparation.cacheKey) {
+      return { ok: true, requestId };
+    }
+    if (activePreparation.tabId === tabId) {
+      chrome.runtime.sendMessage({
+        target: "calameo-pdf-offscreen",
+        type: "CANCEL_JOB",
+        requestId
+      }).catch(() => {});
+      preparationJobs.delete(requestId);
+    }
+  }
+  if (preparationJobs.size > 0) {
+    return { ok: false, error: "Une autre publication est déjà en préparation." };
+  }
+
+  await ensureOffscreenDocument();
+  if (activeJobs.size > 0 || preparationJobs.size > 0) {
+    return { ok: false, error: "Une opération PDF vient de démarrer." };
+  }
+
+  preparationJobs.set(preparation.requestId, { tabId, cacheKey: preparation.cacheKey });
+  let result;
+  try {
+    result = await chrome.runtime.sendMessage({
+      target: "calameo-pdf-offscreen",
+      type: "PREPARE_FULL",
+      requestId: preparation.requestId,
+      tabId,
+      pageCount: preparation.pageCount,
+      pageTemplate: preparation.pageTemplate,
+      title: preparation.title,
+      force: preparation.force
+    });
+  } catch (error) {
+    preparationJobs.delete(preparation.requestId);
+    throw error;
+  }
+
+  if (!result?.ok) {
+    preparationJobs.delete(preparation.requestId);
+    return { ok: false, error: result?.error || "La préparation en arrière-plan n'a pas pu démarrer." };
+  }
+
+  return { ok: true, requestId: preparation.requestId };
+}
+
 function validateJob(message) {
   const requestId = String(message.requestId || "");
   if (!/^[a-zA-Z0-9-]{8,80}$/.test(requestId)) {
@@ -134,7 +217,39 @@ function validateJob(message) {
     throw new Error("La sélection de pages est invalide.");
   }
 
-  const pageTemplate = String(message.pageTemplate || "");
+  const pageTemplate = validatePageTemplate(message.pageTemplate);
+
+  const title = String(message.title || "Publication Calaméo").slice(0, 240);
+  const filename = sanitizeFilename(String(message.filename || title));
+
+  return { requestId, pageCount, pages, pageTemplate, title, filename };
+}
+
+function validatePreparation(message) {
+  const requestId = String(message.requestId || "");
+  if (!/^[a-zA-Z0-9-]{8,80}$/.test(requestId)) {
+    throw new Error("Identifiant de préparation invalide.");
+  }
+
+  const pageCount = Number(message.pageCount);
+  const force = Boolean(message.force);
+  const maxPages = force ? 2000 : 500;
+  if (!Number.isSafeInteger(pageCount) || pageCount < 1 || pageCount > maxPages) {
+    throw new Error("Cette publication est trop volumineuse pour une préparation anticipée.");
+  }
+
+  const pageTemplate = validatePageTemplate(message.pageTemplate);
+  const title = String(message.title || "Publication Calaméo").slice(0, 240);
+  const cacheKey = CalameoPdfShared.documentCacheKey(pageTemplate, pageCount, title);
+  if (!cacheKey) {
+    throw new Error("Le lecteur n'a pas fourni d'identifiant de document valide.");
+  }
+
+  return { requestId, pageCount, pageTemplate, title, force, cacheKey };
+}
+
+function validatePageTemplate(rawPageTemplate) {
+  const pageTemplate = String(rawPageTemplate || "");
   const templateUrl = new URL(pageTemplate);
   if (
     templateUrl.protocol !== "https:" ||
@@ -144,11 +259,7 @@ function validateJob(message) {
   ) {
     throw new Error("Le lecteur n'a pas fourni de ressource de page valide.");
   }
-
-  const title = String(message.title || "Publication Calaméo").slice(0, 240);
-  const filename = sanitizeFilename(String(message.filename || title));
-
-  return { requestId, pageCount, pages, pageTemplate, title, filename };
+  return pageTemplate;
 }
 
 async function ensureOffscreenDocument() {
@@ -240,7 +351,7 @@ async function finishDownload(downloadId, state) {
     type: "REVOKE_DOWNLOAD_URL",
     requestId: record.requestId
   }).catch(() => {});
-  if (activeJobs.size === 0) {
+  if (activeJobs.size === 0 && preparationJobs.size === 0) {
     scheduleOffscreenClose();
   }
 }
@@ -248,7 +359,7 @@ async function finishDownload(downloadId, state) {
 function scheduleOffscreenClose() {
   setTimeout(async () => {
     try {
-      if (activeJobs.size > 0) {
+      if (activeJobs.size > 0 || preparationJobs.size > 0) {
         return;
       }
 
