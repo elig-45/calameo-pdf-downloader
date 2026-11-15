@@ -1,8 +1,10 @@
 <div align="center">
 
-# Calaméo PDF Export
+# Calaméo PDF Downloader — Calaméo PDF Export
 
-Télécharge ou imprime les publications Calaméo complètes, directement depuis le lecteur.
+**Download complete Calaméo publications as PDF files.** Calaméo PDF Export is a browser extension that restores the reader’s native **Download** and **Print** buttons when Calaméo disables them, prepares the full document in the background, and creates the PDF locally.
+
+Télécharge ou imprime une publication Calaméo complète directement depuis le lecteur, sans compte ni service de conversion.
 
 [![Firefox](https://img.shields.io/badge/Firefox-T%C3%A9l%C3%A9charger-FF7139?logo=firefoxbrowser&logoColor=white&style=flat-square)](https://github.com/elig-45/calameo-pdf-export/releases/latest/download/calameo-pdf-export-0.4.0-firefox.zip)
 [![Microsoft Edge](https://img.shields.io/badge/Edge-T%C3%A9l%C3%A9charger-0078D7?logo=microsoftedge&logoColor=white&style=flat-square)](https://github.com/elig-45/calameo-pdf-export/releases/latest/download/calameo-pdf-export-0.4.0-chromium.zip)
