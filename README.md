@@ -4,12 +4,14 @@ Extension Chrome Manifest V3 qui ajoute un bouton **PDF** au lecteur Calaméo. E
 
 ## Fonctionnalités
 
-- Bouton flottant **PDF**, isolé du style de la page Calaméo.
+- Réutilisation du bouton natif **Télécharger** lorsque Calaméo le désactive : il ouvre alors les choix d’export PDF.
 - Export de toutes les pages ou d'une sélection, par exemple `1-3, 8, 12-15`.
 - Barre de progression et annulation pendant la lecture des pages.
 - PDF assemblé localement dans le navigateur, sans service de conversion externe.
 - Nom de fichier dérivé du titre de la publication.
 - Compatible avec Chrome, Brave et Edge sous Chromium 116 ou plus récent.
+
+Lorsque le téléchargement Calaméo est disponible, le bouton conserve son fonctionnement natif.
 
 ## Installer en local
 
@@ -17,7 +19,8 @@ Extension Chrome Manifest V3 qui ajoute un bouton **PDF** au lecteur Calaméo. E
 2. Activer le **Mode développeur**.
 3. Cliquer sur **Charger l'extension non empaquetée**.
 4. Sélectionner le dossier `calameo-pdf-export`.
-5. Ouvrir une publication sur `calameo.com/read/...` et cliquer sur **PDF**.
+5. Ouvrir une publication sur `calameo.com/read/...` et utiliser le bouton natif **Télécharger** ; s’il est désactivé, l’extension ouvre les choix PDF.
+6. Après une mise à jour du code, recharger l’extension dans la page des extensions puis recharger l’onglet Calaméo.
 
 Le dossier doit rester au même endroit tant que l'extension est chargée depuis le disque.
 
@@ -46,6 +49,6 @@ Le PDF est un document image : le texte reconnu ou affiché dans une publication
 ## Structure
 
 - `manifest.json` : permissions et correspondance du lecteur Calaméo.
-- `content.js` : bouton, interface et saisie des pages.
+- `content.js` : adaptation du bouton de téléchargement désactivé, interface et saisie des pages.
 - `background.js` : messages, téléchargement local et cycle de vie du document hors écran.
 - `offscreen.html` / `offscreen.js` : lecture des pages et génération PDF.

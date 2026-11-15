@@ -6,6 +6,11 @@
   const state = {
     host: null,
     shadow: null,
+    nativeDownloadButton: null,
+    nativeDownloadClickHandler: null,
+    nativeDownloadButtonObserver: null,
+    nativeDownloadSnapshot: null,
+    nativeOverrideActive: false,
     currentRequestId: null,
     terminalRequestId: null,
     busy: false,
@@ -26,7 +31,11 @@
 
     state.observer = new MutationObserver((records) => {
       if (records.some((record) => !state.host.contains(record.target))) {
+        syncNativeDownloadButton();
         refreshMetadata();
+        if (!getElement("panel").hidden) {
+          positionPanel();
+        }
       }
     });
     state.observer.observe(document.documentElement, {
@@ -36,6 +45,8 @@
       attributeFilter: ["src", "srcset"]
     });
 
+    window.addEventListener("resize", positionPanel);
+    window.addEventListener("scroll", positionPanel, true);
     chrome.runtime.onMessage.addListener(handleRuntimeMessage);
   }
 
@@ -95,17 +106,10 @@
           <p id="message" class="message" role="status" aria-live="polite"></p>
         </section>
 
-        <button id="launcher" class="launcher" type="button" aria-label="Exporter cette publication en PDF" aria-expanded="false" title="Exporter en PDF">
-          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-            <path d="M10 2.5v9.2m0 0 3.5-3.5M10 11.7 6.5 8.2M3.5 13.5v3h13v-3" />
-          </svg>
-          <span>PDF</span>
-        </button>
       </div>`;
 
     (document.body || document.documentElement).appendChild(state.host);
 
-    const launcher = getElement("launcher");
     const panel = getElement("panel");
     const closeButton = getElement("close");
     const exportButton = getElement("export");
@@ -113,7 +117,6 @@
     const rangeInput = getElement("page-range");
     const selectionWrap = getElement("selection-wrap");
 
-    launcher.addEventListener("click", () => togglePanel());
     closeButton.addEventListener("click", () => closePanel());
     exportButton.addEventListener("click", startExport);
     cancelButton.addEventListener("click", cancelExport);
@@ -144,11 +147,16 @@
   }
 
   function refreshMetadata() {
-    if (!state.shadow || state.busy) {
+    if (!state.shadow) {
       return;
     }
 
     const metadata = readReaderMetadata();
+    syncNativeDownloadButton(metadata);
+    if (state.busy) {
+      return;
+    }
+
     const metaNode = getElement("book-meta");
     const exportButton = getElement("export");
     const canExport = metadata.pageCount > 0 && Boolean(metadata.pageTemplate);
@@ -168,6 +176,118 @@
     } else if (canExport && getElement("message").textContent.includes("prépare les pages")) {
       clearMessage();
     }
+  }
+
+  function syncNativeDownloadButton(metadata = readReaderMetadata()) {
+    const button = document.getElementById("action-8");
+    if (button !== state.nativeDownloadButton) {
+      if (state.nativeDownloadButton && !getElement("panel").hidden) {
+        closePanel(false);
+      }
+      releaseNativeDownloadButton();
+      if (!button) {
+        return;
+      }
+
+      state.nativeDownloadButton = button;
+      state.nativeDownloadButtonObserver = new MutationObserver(() => {
+        syncNativeDownloadButton();
+      });
+      state.nativeDownloadButtonObserver.observe(button, {
+        attributes: true,
+        attributeFilter: ["class", "disabled"]
+      });
+    }
+
+    if (!state.nativeOverrideActive && isNativeButtonDisabled(button)) {
+      beginNativeDownloadOverride(button);
+    }
+
+    if (state.nativeOverrideActive && button === state.nativeDownloadButton) {
+      updateNativeDownloadButton(metadata);
+    }
+  }
+
+  function beginNativeDownloadOverride(button) {
+    state.nativeDownloadSnapshot = {
+      disabled: button.disabled,
+      disabledClass: button.classList.contains("button-disabled"),
+      enabledClass: button.classList.contains("button-enabled"),
+      ariaLabel: button.getAttribute("aria-label"),
+      title: button.getAttribute("title"),
+      ariaHaspopup: button.getAttribute("aria-haspopup"),
+      ariaExpanded: button.getAttribute("aria-expanded"),
+      ariaBusy: button.getAttribute("aria-busy")
+    };
+    state.nativeDownloadClickHandler = handleNativeDownloadClick;
+    state.nativeOverrideActive = true;
+    button.addEventListener("click", state.nativeDownloadClickHandler, true);
+    button.setAttribute("data-calameo-pdf-override", "true");
+  }
+
+  function updateNativeDownloadButton(metadata) {
+    const button = state.nativeDownloadButton;
+    if (!button || !state.nativeOverrideActive) {
+      return;
+    }
+
+    const canExport = metadata.pageCount > 0 && Boolean(metadata.pageTemplate);
+    if (button.disabled !== !canExport) {
+      button.disabled = !canExport;
+    }
+    button.classList.toggle("button-disabled", !canExport);
+    button.classList.toggle("button-enabled", canExport);
+    button.setAttribute("aria-label", canExport ? "Télécharger le document en PDF" : "Préparation du téléchargement PDF");
+    button.setAttribute("title", canExport ? "Télécharger le document en PDF" : "Le lecteur prépare les pages pour l’export PDF");
+    button.setAttribute("aria-haspopup", "dialog");
+    button.setAttribute("aria-expanded", String(!getElement("panel").hidden));
+  }
+
+  function releaseNativeDownloadButton() {
+    const button = state.nativeDownloadButton;
+    if (button && state.nativeDownloadClickHandler) {
+      button.removeEventListener("click", state.nativeDownloadClickHandler, true);
+    }
+    state.nativeDownloadButtonObserver?.disconnect();
+
+    if (button && state.nativeOverrideActive && state.nativeDownloadSnapshot) {
+      button.disabled = state.nativeDownloadSnapshot.disabled;
+      button.classList.toggle("button-disabled", state.nativeDownloadSnapshot.disabledClass);
+      button.classList.toggle("button-enabled", state.nativeDownloadSnapshot.enabledClass);
+      restoreAttribute(button, "aria-label", state.nativeDownloadSnapshot.ariaLabel);
+      restoreAttribute(button, "title", state.nativeDownloadSnapshot.title);
+      restoreAttribute(button, "aria-haspopup", state.nativeDownloadSnapshot.ariaHaspopup);
+      restoreAttribute(button, "aria-expanded", state.nativeDownloadSnapshot.ariaExpanded);
+      restoreAttribute(button, "aria-busy", state.nativeDownloadSnapshot.ariaBusy);
+      button.removeAttribute("data-calameo-pdf-override");
+    }
+
+    state.nativeDownloadButton = null;
+    state.nativeDownloadClickHandler = null;
+    state.nativeDownloadButtonObserver = null;
+    state.nativeDownloadSnapshot = null;
+    state.nativeOverrideActive = false;
+  }
+
+  function restoreAttribute(node, name, value) {
+    if (value === null) {
+      node.removeAttribute(name);
+    } else {
+      node.setAttribute(name, value);
+    }
+  }
+
+  function isNativeButtonDisabled(button) {
+    return Boolean(button?.disabled || button?.classList.contains("button-disabled"));
+  }
+
+  function handleNativeDownloadClick(event) {
+    if (!state.nativeOverrideActive || event.currentTarget !== state.nativeDownloadButton) {
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    togglePanel();
   }
 
   function readReaderMetadata() {
@@ -385,7 +505,9 @@
 
   function setBusy(busy) {
     state.busy = busy;
-    getElement("launcher").setAttribute("aria-busy", String(busy));
+    if (state.nativeOverrideActive) {
+      state.nativeDownloadButton?.setAttribute("aria-busy", String(busy));
+    }
     const metadata = readReaderMetadata();
     getElement("export").disabled = busy || !metadata.pageCount || !metadata.pageTemplate;
     getElement("close").disabled = busy;
@@ -405,23 +527,52 @@
 
     refreshMetadata();
     panel.hidden = false;
-    getElement("launcher").setAttribute("aria-expanded", "true");
+    state.nativeDownloadButton?.setAttribute("aria-expanded", "true");
+    positionPanel();
     if (getMode() === "selection") {
       getElement("page-range").focus();
     }
   }
 
-  function closePanel() {
+  function closePanel(restoreFocus = true) {
     getElement("panel").hidden = true;
-    getElement("launcher").setAttribute("aria-expanded", "false");
-    getElement("launcher").focus();
+    state.nativeDownloadButton?.setAttribute("aria-expanded", "false");
+    if (restoreFocus && state.nativeDownloadButton?.isConnected) {
+      state.nativeDownloadButton.focus();
+    }
   }
 
   function handleOutsidePointerDown(event) {
-    if (!state.host || getElement("panel").hidden || state.host.contains(event.target)) {
+    if (
+      !state.host
+      || getElement("panel").hidden
+      || state.host.contains(event.target)
+      || state.nativeDownloadButton?.contains(event.target)
+    ) {
       return;
     }
-    closePanel();
+    closePanel(false);
+  }
+
+  function positionPanel() {
+    if (!state.host || !state.nativeDownloadButton?.isConnected || getElement("panel").hidden) {
+      return;
+    }
+
+    const buttonRect = state.nativeDownloadButton.getBoundingClientRect();
+    const panel = getElement("panel");
+    const panelWidth = Math.min(356, Math.max(280, window.innerWidth - 24));
+    const panelHeight = Math.min(panel.offsetHeight || 380, window.innerHeight - 24);
+    const minLeft = 12;
+    const maxLeft = Math.max(minLeft, window.innerWidth - panelWidth - 12);
+    const left = Math.min(maxLeft, Math.max(minLeft, buttonRect.right - panelWidth));
+    const below = buttonRect.bottom + 8;
+    const top = below + panelHeight <= window.innerHeight - 12
+      ? below
+      : Math.max(12, buttonRect.top - panelHeight - 8);
+
+    state.host.style.setProperty("--panel-left", `${left}px`);
+    state.host.style.setProperty("--panel-top", `${top}px`);
   }
 
   function getMode() {
@@ -459,45 +610,29 @@
       #root {
         position: fixed;
         z-index: 2147483647;
-        right: max(18px, env(safe-area-inset-right));
-        bottom: max(18px, env(safe-area-inset-bottom));
+        left: var(--panel-left, 18px);
+        top: var(--panel-top, 70px);
         display: flex;
-        align-items: flex-end;
+        align-items: flex-start;
         flex-direction: column;
         gap: 12px;
+        pointer-events: none;
         color: #202426;
         font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         -webkit-font-smoothing: antialiased;
       }
-      .launcher {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        min-width: 70px;
-        height: 48px;
-        padding: 0 15px;
-        border: 1px solid rgba(255,255,255,.22);
-        border-radius: 999px;
-        background: #252b2e;
-        color: #fff;
-        box-shadow: 0 8px 24px rgba(17, 27, 32, .28);
-        font: 700 13px/1 system-ui, sans-serif;
-        letter-spacing: .08em;
-        cursor: pointer;
-        transition: transform .16s ease, background .16s ease, box-shadow .16s ease;
-      }
-      .launcher:hover { transform: translateY(-2px); background: #171c1e; box-shadow: 0 10px 28px rgba(17,27,32,.34); }
-      .launcher:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid #84bd4d; outline-offset: 3px; }
-      .launcher svg { width: 18px; height: 18px; fill: none; stroke: #a9d979; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-      .launcher[aria-busy="true"] { opacity: .75; cursor: progress; }
+      button:focus-visible, input:focus-visible { outline: 3px solid #84bd4d; outline-offset: 3px; }
       .panel {
         width: min(356px, calc(100vw - 36px));
+        max-height: calc(100vh - 24px);
+        overflow: auto;
         padding: 21px;
         border: 1px solid rgba(32,36,38,.1);
         border-radius: 16px;
         background: #fff;
         box-shadow: 0 18px 60px rgba(13, 23, 27, .24), 0 2px 8px rgba(13,23,27,.08);
         color: #202426;
+        pointer-events: auto;
         animation: panel-in .18s cubic-bezier(.2,.8,.2,1) both;
       }
       .panel[hidden] { display: none; }
@@ -543,7 +678,7 @@
       .message:empty { display: none; }
       .message[data-tone="error"] { color: #a3332d; }
       @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
-      @media (max-width: 480px) { #root { right: 12px; bottom: 12px; } .panel { width: min(340px, calc(100vw - 24px)); } }
+      @media (max-width: 480px) { .panel { width: min(340px, calc(100vw - 24px)); } }
     `;
   }
 })();
