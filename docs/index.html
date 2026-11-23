@@ -11,7 +11,7 @@
     <link rel="alternate" hreflang="fr" href="https://elig-45.github.io/calameo-pdf-downloader/fr/">
     <link rel="alternate" hreflang="x-default" href="https://elig-45.github.io/calameo-pdf-downloader/">
     <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-    <link rel="stylesheet" href="assets/site.css?v=illustrated-project-page">
+    <link rel="stylesheet" href="assets/site.css?v=compare-cards-redesign">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Calaméo PDF Downloader">
     <meta property="og:title" content="Calaméo PDF Downloader">
@@ -80,28 +80,29 @@
       </section>
 
       <section class="section comparison" id="comparison" aria-labelledby="comparison-title">
-        <h2 id="comparison-title">How it compares</h2>
-        <p class="comparison-intro"><strong>Best for a complete PDF from inside the reader:</strong> this project combines direct download, restored native controls and background preparation.</p>
-        <div class="comparison-table-wrap" role="region" aria-label="Comparison with other Calaméo download projects" tabindex="0">
-          <table class="comparison-table">
-            <thead>
-              <tr>
-                <th scope="col">Capability</th>
-                <th class="project-column" scope="col">Calaméo PDF Downloader <span>(this project)</span></th>
-                <th scope="col"><a href="https://github.com/Florianclume/calameo-download-pdf-webext">Florianclume WebExtension</a></th>
-                <th scope="col"><a href="https://github.com/ComFoxx/calameo-download-pdf">ComFoxx Download PDF</a></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><th scope="row">Where it works</th><td class="project-column">Inside Calaméo’s reader, using its native Download and Print buttons.</td><td>Inside the reader, with a separate floating Print button.</td><td>On a separate web page; paste in the publication URL.</td></tr>
-              <tr><th scope="row">Full publication PDF</th><td class="project-column">One click downloads all pages as one PDF.</td><td>Loads every page, then opens the browser print dialog.</td><td>Loads every page, then opens the browser print dialog.</td></tr>
-              <tr><th scope="row">Disabled reader buttons</th><td class="project-column">Re-enables the native Download and Print buttons.</td><td>Adds a separate print control; does not restore the reader buttons.</td><td>Not integrated with the Calaméo reader.</td></tr>
-              <tr><th scope="row">Preparation</th><td class="project-column">Prepares the complete PDF in the background before you click.</td><td>Loads page images after you click its print button.</td><td>Loads page images after you submit the form.</td></tr>
-              <tr><th scope="row">Selected pages</th><td class="project-column">Choose page ranges in the browser’s print dialog.</td><td>Choose page ranges in the browser’s print dialog.</td><td>Choose page ranges in the browser’s print dialog.</td></tr>
-              <tr><th scope="row">Status and access</th><td class="project-column">Firefox 140+, Chrome, Edge and Brave (tested). Free forever · AGPL v3.</td><td>Firefox and Edge listings; Chrome package on GitHub Releases.</td><td>Archived on 22 September 2026; its README recommends Chromium.</td></tr>
-            </tbody>
-          </table>
+        <p class="eyebrow">Three ways to get the PDF</p>
+        <div class="comparison-heading"><div><h2 id="comparison-title">How it compares</h2><p>For a complete publication, staying in the reader makes the difference.</p></div><span class="comparison-stamp"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12.5 9.2 17 19 7"/></svg>Compared feature by feature</span></div>
+        <div class="comparison-deck" role="group" aria-label="Comparison with other Calaméo download projects">
+          <article class="compare-card compare-card-featured">
+            <div class="compare-card-top"><div class="compare-brand"><img src="assets/calameo-pdf-export-logo.svg" alt=""><div><span class="compare-label">OUR EXTENSION</span><h3>Calaméo PDF Downloader</h3></div></div><span class="compare-award">Best fit for in-reader PDF</span></div>
+            <div class="compare-flow"><span>Reader</span><svg aria-hidden="true" viewBox="0 0 28 12"><path d="M1 6h23m-5-5 5 5-5 5"/></svg><strong>Complete PDF</strong><span class="flow-ready">READY</span></div>
+            <dl class="compare-facts"><div><dt>Workflow</dt><dd>Uses Calaméo’s native Download and Print controls.</dd></div><div><dt>Full document</dt><dd>One click saves all pages; preparation happens in the background.</dd></div><div><dt>Selected pages</dt><dd>Open the browser’s normal print dialog.</dd></div></dl>
+            <div class="compare-footer"><span>Firefox · Chrome · Edge · Brave tested</span><span>Free · AGPL v3</span></div>
+          </article>
+          <article class="compare-card">
+            <div class="compare-card-top"><div class="compare-brand"><span class="competitor-mark mark-florian">FW</span><div><span class="compare-label">BROWSER EXTENSION</span><h3><a href="https://github.com/Florianclume/calameo-download-pdf-webext">Florianclume WebExtension</a></h3></div></div></div>
+            <div class="compare-flow"><span>Reader</span><svg aria-hidden="true" viewBox="0 0 28 12"><path d="M1 6h23m-5-5 5 5-5 5"/></svg><strong>Print dialog</strong></div>
+            <dl class="compare-facts"><div><dt>Workflow</dt><dd>Adds a separate floating Print button in the reader.</dd></div><div><dt>Full document</dt><dd>Loads page images after the click, then opens browser printing.</dd></div><div><dt>Selected pages</dt><dd>Choose a page range in the print dialog.</dd></div></dl>
+            <div class="compare-footer"><span>Firefox · Edge · Chrome package</span><a href="https://github.com/Florianclume/calameo-download-pdf-webext">View project ↗</a></div>
+          </article>
+          <article class="compare-card">
+            <div class="compare-card-top"><div class="compare-brand"><span class="competitor-mark mark-comfoxx">CF</span><div><span class="compare-label">STANDALONE WEB TOOL</span><h3><a href="https://github.com/ComFoxx/calameo-download-pdf">ComFoxx Download PDF</a></h3></div></div></div>
+            <div class="compare-flow"><span>Paste link</span><svg aria-hidden="true" viewBox="0 0 28 12"><path d="M1 6h23m-5-5 5 5-5 5"/></svg><strong>Print dialog</strong></div>
+            <dl class="compare-facts"><div><dt>Workflow</dt><dd>Paste the publication URL into a separate web page.</dd></div><div><dt>Full document</dt><dd>Loads page images after submission, then uses browser printing.</dd></div><div><dt>Selected pages</dt><dd>Choose a page range in the print dialog.</dd></div></dl>
+            <div class="compare-footer"><span>Repository archived</span><a href="https://github.com/ComFoxx/calameo-download-pdf">View project ↗</a></div>
+          </article>
         </div>
+        <p class="comparison-footnote">All three approaches can print selected pages. This extension stands out when you want one complete PDF without leaving the Calaméo reader.</p>
       </section>
 
       <section class="section" id="install" aria-labelledby="install-title">

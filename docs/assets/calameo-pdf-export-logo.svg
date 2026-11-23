@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Calaméo PDF Export — icône">
+  <defs>
+    <linearGradient id="ibg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#213D59"/><stop offset=".52" stop-color="#152E49"/><stop offset="1" stop-color="#0B1C32"/>
+    </linearGradient>
+    <linearGradient id="ppr" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#F0F5FA"/>
+    </linearGradient>
+    <linearGradient id="coral" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FF6564"/><stop offset="1" stop-color="#DC3C43"/>
+    </linearGradient>
+    <clipPath id="round"><rect width="512" height="512" rx="108"/></clipPath>
+  </defs>
+  <g clip-path="url(#round)">
+    <rect width="512" height="512" fill="url(#ibg)"/>
+    <circle cx="447" cy="47" r="218" fill="#8CCFE1" opacity=".06"/>
+    <path d="M-20 390C130 250 251 478 520 294" stroke="#9CD6E4" stroke-width="2" fill="none" opacity=".1"/>
+    <g transform="rotate(-9 245 255)">
+      <rect x="113" y="102" width="242" height="310" rx="24" fill="#91B1C6" opacity=".45"/>
+    </g>
+    <path d="M165 77H306L377 148V407C377 424 365 435 349 435H165C148 435 136 424 136 407V105C136 89 148 77 165 77Z" fill="#09192B" opacity=".38" transform="translate(7 9)"/>
+    <path d="M165 77H306L377 148V407C377 424 365 435 349 435H165C148 435 136 424 136 407V105C136 89 148 77 165 77Z" fill="url(#ppr)"/>
+    <path d="M306 77V131C306 143 313 148 325 148H377Z" fill="#DCEAF3"/>
+    <path d="M306 77V131C306 143 313 148 325 148H377" fill="none" stroke="#B8CFDE" stroke-width="3" stroke-linejoin="round"/>
+    <rect x="165" y="159" width="83" height="37" rx="10" fill="#DDE9F1"/>
+    <text x="206.5" y="184.5" font-family="Inter,Arial,sans-serif" font-weight="800" text-anchor="middle" font-size="24" fill="#244662">PDF</text>
+    <path d="M270 175H337M165 218H334" stroke="#C2D4E0" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="257" cy="318" r="91" fill="url(#coral)"/>
+    <path d="M257 267V338M224 312L257 345L290 312" fill="none" stroke="#fff" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M224 370H290" stroke="#fff" stroke-width="13" stroke-linecap="round"/>
+    <circle cx="408" cy="385" r="22" fill="#E55D60" opacity=".18"/>
+  </g>
+</svg>
