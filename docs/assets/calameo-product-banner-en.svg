@@ -12,7 +12,7 @@
   <text x="30" y="112" font-size="34" letter-spacing="-1.5" font-weight="800" fill="#FF7272">PDF Export</text>
   <path d="M30 134H81" stroke="#FF7272" stroke-width="3.5" stroke-linecap="round"/>
   <text x="30" y="165" font-size="16.5" font-weight="550" fill="#E2EFF6">Download and print</text>
-  <text x="30" y="189" font-size="16.5" font-weight="550" fill="#E2EFF6">complete publications as PDF.</text>
+  <text x="30" y="189" font-size="16.5" font-weight="550" fill="#E2EFF6">Every page, one PDF.</text>
   <rect x="30" y="215" width="167" height="33" rx="16.5" fill="#274A60"/>
   <text x="113.5" y="237" font-size="12.5" font-weight="700" fill="#DCEFF4" text-anchor="middle" letter-spacing=".3">PDF · NO ACCOUNT</text>
 </g>
