@@ -1,10 +1,16 @@
 (() => {
-  const select = document.getElementById("theme-choice");
+  const toggle = document.getElementById("theme-toggle");
   const root = document.documentElement;
   const themeColor = document.querySelector('meta[name="theme-color"]');
   const darkPreference = window.matchMedia("(prefers-color-scheme: dark)");
   const storageKey = "calameo-theme";
   let preference = "system";
+  const themeNames = root.lang === "fr"
+    ? { system: "système", light: "clair", dark: "sombre" }
+    : { system: "system", light: "light", dark: "dark" };
+  const nextThemeNames = root.lang === "fr"
+    ? { system: "clair", light: "sombre", dark: "système" }
+    : { system: "light", light: "dark", dark: "system" };
 
   try {
     const saved = localStorage.getItem(storageKey);
@@ -20,15 +26,22 @@
     preference = value;
     if (value === "system") root.removeAttribute("data-theme");
     else root.dataset.theme = value;
-    if (select) select.value = value;
+    if (toggle) {
+      const label = root.lang === "fr"
+        ? `Thème ${themeNames[value]}. Activer pour passer au thème ${nextThemeNames[value]}.`
+        : `Theme: ${themeNames[value]}. Activate to switch to ${nextThemeNames[value]}.`;
+      toggle.dataset.themeChoice = value;
+      toggle.setAttribute("aria-label", label);
+      toggle.title = label;
+    }
     updateThemeColor();
   }
 
   applyPreference(preference);
 
-  if (select) {
-    select.addEventListener("change", () => {
-      const value = select.value;
+  if (toggle) {
+    toggle.addEventListener("click", () => {
+      const value = { system: "light", light: "dark", dark: "system" }[preference] || "system";
       applyPreference(value);
       try {
         if (value === "system") localStorage.removeItem(storageKey);
