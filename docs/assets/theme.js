@@ -13,7 +13,7 @@
 
   function updateThemeColor() {
     const dark = preference === "dark" || (preference === "system" && darkPreference.matches);
-    if (themeColor) themeColor.content = dark ? "#0d1117" : "#ffffff";
+    if (themeColor) themeColor.content = dark ? "#101a24" : "#faf8f3";
   }
 
   function applyPreference(value) {
