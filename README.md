@@ -12,6 +12,7 @@ Télécharge ou imprime une publication Calaméo complète directement depuis le
 [![Microsoft Edge](https://img.shields.io/badge/Edge-T%C3%A9l%C3%A9charger-0078D7?logo=microsoftedge&logoColor=white&style=flat-square)](https://github.com/elig-45/calameo-pdf-downloader/releases/latest/download/calameo-pdf-export-0.4.0-chromium.zip)
 [![Brave testé](https://img.shields.io/badge/Brave-test%C3%A9-FF5F1F?logo=brave&logoColor=white&style=flat-square)](https://brave.com/)
 [![Dernière version](https://img.shields.io/github/v/release/elig-45/calameo-pdf-downloader?logo=github&label=version&style=flat-square)](https://github.com/elig-45/calameo-pdf-downloader/releases/latest)
+[![Licence AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square)](LICENSE)
 
 <img src="store-assets/edge-small-tile-440x280.png" alt="Calaméo PDF Export : télécharger et imprimer des publications complètes" width="440">
 
@@ -52,6 +53,10 @@ L’extension réutilise les boutons natifs **Télécharger** et **Imprimer**. S
 - Le lien signé fourni par le lecteur sert aux requêtes de pages et n’est pas enregistré.
 - Le PDF complet préparé est stocké localement dans l’extension pendant sept jours au maximum.
 - L’extension n’utilise ni compte, ni analytics, ni suivi.
+
+## Prix et licence
+
+L’extension est gratuite pour toujours, sans compte ni abonnement. Le projet est distribué sous licence GNU Affero General Public License v3.0 (AGPL v3) ; consulte [LICENSE](LICENSE) pour le texte complet.
 
 ## Limites
 
