@@ -8,7 +8,7 @@ Télécharge ou imprime une publication Calaméo complète directement depuis le
 
 [Visiter le site du projet](https://elig-45.github.io/calameo-pdf-downloader/) · [Voir les releases](https://github.com/elig-45/calameo-pdf-downloader/releases/latest)
 
-[![Firefox](https://img.shields.io/badge/Firefox-T%C3%A9l%C3%A9charger-FF7139?logo=firefoxbrowser&logoColor=white&style=flat-square)](https://github.com/elig-45/calameo-pdf-downloader/releases/latest/download/calameo-pdf-export-0.4.0-firefox.zip)
+[![Firefox Add-ons](https://img.shields.io/badge/Firefox-Add--ons-FF7139?logo=firefoxbrowser&logoColor=white&style=flat-square)](https://addons.mozilla.org/fr/firefox/addon/calam%C3%A9o-pdf-export/)
 [![Microsoft Edge](https://img.shields.io/badge/Edge-T%C3%A9l%C3%A9charger-0078D7?logo=microsoftedge&logoColor=white&style=flat-square)](https://github.com/elig-45/calameo-pdf-downloader/releases/latest/download/calameo-pdf-export-0.4.0-chromium.zip)
 [![Brave testé](https://img.shields.io/badge/Brave-test%C3%A9-FF5F1F?logo=brave&logoColor=white&style=flat-square)](https://brave.com/)
 [![Dernière version](https://img.shields.io/github/v/release/elig-45/calameo-pdf-downloader?logo=github&label=version&style=flat-square)](https://github.com/elig-45/calameo-pdf-downloader/releases/latest)
@@ -25,7 +25,7 @@ L’extension réutilise les boutons natifs **Télécharger** et **Imprimer**. S
 
 | Navigateur | État | Installation |
 | --- | --- | --- |
-| Firefox | Firefox 140+ | [Télécharger depuis GitHub](https://github.com/elig-45/calameo-pdf-downloader/releases/latest/download/calameo-pdf-export-0.4.0-firefox.zip) |
+| Firefox | Firefox 140+ | [Installer depuis Firefox Add-ons](https://addons.mozilla.org/fr/firefox/addon/calam%C3%A9o-pdf-export/) |
 | Microsoft Edge | Compatible Chromium | [Télécharger depuis GitHub](https://github.com/elig-45/calameo-pdf-downloader/releases/latest/download/calameo-pdf-export-0.4.0-chromium.zip) |
 | Brave | Testé | [Dernière release](https://github.com/elig-45/calameo-pdf-downloader/releases/latest) |
 | Google Chrome | Compatible Chromium 121+ | [Dernière release](https://github.com/elig-45/calameo-pdf-downloader/releases/latest) |

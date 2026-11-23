@@ -2,14 +2,14 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://elig-45.github.io/calameo-pdf-downloader/</loc>
-    <xhtml:link rel="alternate" hreflang="fr" href="https://elig-45.github.io/calameo-pdf-downloader/" />
-    <xhtml:link rel="alternate" hreflang="en" href="https://elig-45.github.io/calameo-pdf-downloader/en/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://elig-45.github.io/calameo-pdf-downloader/" />
+    <xhtml:link rel="alternate" hreflang="fr" href="https://elig-45.github.io/calameo-pdf-downloader/fr/" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://elig-45.github.io/calameo-pdf-downloader/" />
   </url>
   <url>
-    <loc>https://elig-45.github.io/calameo-pdf-downloader/en/</loc>
-    <xhtml:link rel="alternate" hreflang="fr" href="https://elig-45.github.io/calameo-pdf-downloader/" />
-    <xhtml:link rel="alternate" hreflang="en" href="https://elig-45.github.io/calameo-pdf-downloader/en/" />
+    <loc>https://elig-45.github.io/calameo-pdf-downloader/fr/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://elig-45.github.io/calameo-pdf-downloader/" />
+    <xhtml:link rel="alternate" hreflang="fr" href="https://elig-45.github.io/calameo-pdf-downloader/fr/" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://elig-45.github.io/calameo-pdf-downloader/" />
   </url>
 </urlset>
